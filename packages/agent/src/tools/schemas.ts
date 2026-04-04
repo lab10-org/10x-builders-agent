@@ -22,6 +22,10 @@ export const TOOL_SCHEMAS = {
     description: z.string().optional().default(""),
     isPrivate: z.boolean().optional().default(false),
   }),
+  bash: z.object({
+    terminal: z.string().describe("Terminal identifier for correlation and logging"),
+    prompt: z.string().max(4096).describe("Bash command to execute"),
+  }),
 } as const;
 
 export type ToolSchemas = typeof TOOL_SCHEMAS;

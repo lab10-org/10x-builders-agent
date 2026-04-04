@@ -68,6 +68,12 @@ function buildConfirmationMessage(
       return `Se requiere confirmación para crear el issue "${args.title}" en ${args.owner}/${args.repo}.`;
     case "github_create_repo":
       return `Se requiere confirmación para crear el repositorio "${args.name}"${args.isPrivate ? " (privado)" : ""}.`;
+    case "bash": {
+      const prompt = String(args.prompt ?? "");
+      const preview = prompt.length > 200 ? `${prompt.slice(0, 200)}…` : prompt;
+      const terminal = args.terminal ? ` en terminal "${args.terminal}"` : "";
+      return `Se requiere confirmación para ejecutar el siguiente comando bash${terminal}:\n\`\`\`\n${preview}\n\`\`\``;
+    }
     default:
       return `Se requiere confirmación para ejecutar "${toolId}" (riesgo: ${getToolRisk(toolId)}).`;
   }

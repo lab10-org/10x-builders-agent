@@ -5,6 +5,7 @@ import type { UserToolSetting, UserIntegration } from "@agents/types";
 import { TOOL_CATALOG } from "@agents/types";
 import { TOOL_SCHEMAS } from "./schemas";
 import { withTracking } from "./withTracking";
+import { executeBash } from "./bashExec";
 
 const GITHUB_API = "https://api.github.com";
 const GITHUB_UA = "10x-builders-agent/1.0";
@@ -160,6 +161,11 @@ const TOOL_HANDLERS: ToolHandlers = {
 
   github_create_repo: async (input, ctx) =>
     executeGitHubTool("github_create_repo", input, ctx.githubToken!),
+
+  bash: async (input: { terminal: string; prompt: string }) => {
+    const result = await executeBash(input.terminal, input.prompt);
+    return result as unknown as Record<string, unknown>;
+  },
 };
 
 export function buildLangChainTools(ctx: ToolContext) {

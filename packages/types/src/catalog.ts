@@ -90,6 +90,23 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     displayName: "GitHub: crear repositorio",
     displayDescription: "Crea un repositorio nuevo en GitHub (requiere confirmación).",
   },
+  {
+    id: "bash",
+    name: "bash",
+    description:
+      "Use this tool when you need to execute bash commands and interact with the operative system. This tool executes commands in a new or existing terminal and returns the commands text output. The system running is a unix-like O.S.",
+    risk: "high",
+    parameters_schema: {
+      type: "object",
+      properties: {
+        terminal: { type: "string", description: "Terminal identifier for correlation and logging" },
+        prompt: { type: "string", description: "Bash command to execute" },
+      },
+      required: ["terminal", "prompt"],
+    },
+    displayName: "Bash",
+    displayDescription: "Ejecuta comandos bash en el servidor (riesgo alto, requiere confirmación).",
+  },
 ];
 
 export function getToolRisk(toolId: string): ToolRisk {
