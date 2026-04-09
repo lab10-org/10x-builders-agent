@@ -30,6 +30,7 @@ import {
 import { getCheckpointer } from "./checkpointer";
 import { GraphState } from "./state";
 import { compactionNode } from "./nodes/compaction_node";
+import { createMemoryInjectionNode } from "./nodes/memory_injection_node";
 
 
 export interface AgentInput {
@@ -261,11 +262,15 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     return "end";
   }
 
+  const memoryInjectionNode = createMemoryInjectionNode({ db, userId });
+
   const graph = new StateGraph(GraphState)
+    .addNode("memory_injection", memoryInjectionNode)
     .addNode("compaction", compactionNode)
     .addNode("agent", agentNode)
     .addNode("tools", toolExecutorNode)
-    .addEdge("__start__", "compaction")
+    .addEdge("__start__", "memory_injection")
+    .addEdge("memory_injection", "compaction")
     .addEdge("compaction", "agent")
     .addConditionalEdges("agent", shouldContinue, {
       tools: "tools",

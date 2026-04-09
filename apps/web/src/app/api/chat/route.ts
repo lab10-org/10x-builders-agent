@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServerClient, decrypt, touchSession } from "@agents/db";
-import { runAgent } from "@agents/agent";
+import { runAgent, flushSessionMemory } from "@agents/agent";
 
 export async function POST(request: Request) {
   try {
@@ -117,6 +117,14 @@ export async function POST(request: Request) {
       })),
       githubToken,
     });
+
+    // Fire-and-forget: extract long-term memories after a normal completion.
+    // Only skipped when the graph is paused waiting for HITL confirmation.
+    if (!result.pendingConfirmation) {
+      flushSessionMemory({ db, userId: user.id, sessionId: session.id }).catch(
+        (err) => console.error("[chat] memory flush failed:", err)
+      );
+    }
 
     return NextResponse.json({
       response: result.pendingConfirmation ? null : result.response,
