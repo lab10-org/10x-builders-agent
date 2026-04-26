@@ -11,6 +11,7 @@ import {
   ToolMessage,
   type BaseMessage,
 } from "@langchain/core/messages";
+import type { RunnableConfig } from "@langchain/core/runnables";
 import type { DbClient } from "@agents/db";
 import type { UserToolSetting, UserIntegration, PendingConfirmation } from "@agents/types";
 import {
@@ -31,6 +32,7 @@ import { getCheckpointer } from "./checkpointer";
 import { GraphState } from "./state";
 import { compactionNode } from "./nodes/compaction_node";
 import { createMemoryInjectionNode } from "./nodes/memory_injection_node";
+import { createLangfuseRunnableConfig } from "./langfuse";
 
 
 export interface AgentInput {
@@ -121,7 +123,8 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   const toolCallNames: string[] = [];
 
   async function agentNode(
-    state: typeof GraphState.State
+    state: typeof GraphState.State,
+    config?: RunnableConfig
   ): Promise<Partial<typeof GraphState.State>> {
     const currentDate = new Date().toLocaleString("es", {
       timeZone: "America/Bogota",
@@ -135,15 +138,19 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     const systemPromptWithDate = `${state.systemPrompt}\n\nFecha y hora actual: ${currentDate} (hora Colombia).`;
 
     // Inject SystemMessage fresh so it is never accumulated in state.messages.
-    const response = await modelWithTools.invoke([
-      new SystemMessage(systemPromptWithDate),
-      ...state.messages,
-    ]);
+    const response = await modelWithTools.invoke(
+      [
+        new SystemMessage(systemPromptWithDate),
+        ...state.messages,
+      ],
+      config
+    );
     return { messages: [response] };
   }
 
   async function toolExecutorNode(
-    state: typeof GraphState.State
+    state: typeof GraphState.State,
+    config?: RunnableConfig
   ): Promise<Partial<typeof GraphState.State>> {
     const lastMsg = state.messages[state.messages.length - 1];
     if (!(lastMsg instanceof AIMessage) || !lastMsg.tool_calls?.length) {
@@ -233,7 +240,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       }
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const rawResult = await (matchingTool as any).invoke(tc.args);
+        const rawResult = await (matchingTool as any).invoke(tc.args, config);
         results.push(
           new ToolMessage({ content: String(rawResult), tool_call_id: tc.id! })
         );
@@ -281,7 +288,24 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   const checkpointer = await getCheckpointer();
   const app = graph.compile({ checkpointer });
 
-  const config = { configurable: { thread_id: sessionId } };
+  const langfuseConfig = createLangfuseRunnableConfig({
+    userId,
+    sessionId,
+    runName: resumeDecision ? "agent-confirmation" : "agent-message",
+    tags: [
+      "10x-builders-agent",
+      bypassConfirmation ? "cron" : "interactive",
+      resumeDecision ? "resume" : "message",
+    ],
+    metadata: {
+      agentSessionId: sessionId,
+      bypassConfirmation,
+    },
+  });
+  const config: RunnableConfig = {
+    ...langfuseConfig,
+    configurable: { thread_id: sessionId },
+  };
 
   let finalState: typeof GraphState.State & { [INTERRUPT]?: unknown[] };
 

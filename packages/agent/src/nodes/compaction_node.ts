@@ -7,6 +7,7 @@ import {
 } from "@langchain/core/messages";
 import { RemoveMessage } from "@langchain/core/messages";
 import { REMOVE_ALL_MESSAGES } from "@langchain/langgraph";
+import type { RunnableConfig } from "@langchain/core/runnables";
 import { createCompactionModel } from "../model";
 import type { GraphState } from "../state";
 
@@ -110,7 +111,10 @@ Rules:
 - Do NOT include an <analysis> block.
 - Output only the 9-section summary, nothing else.`;
 
-async function llmCompact(messages: BaseMessage[]): Promise<string> {
+async function llmCompact(
+  messages: BaseMessage[],
+  config?: RunnableConfig
+): Promise<string> {
   const model = createCompactionModel();
 
   const transcript = messages
@@ -130,12 +134,15 @@ async function llmCompact(messages: BaseMessage[]): Promise<string> {
     })
     .join("\n\n");
 
-  const response = await model.invoke([
-    new SystemMessage(COMPACTION_PROMPT),
-    new HumanMessage(
-      `Conversation to summarize:\n\n${transcript}\n\nProvide the structured 9-section summary now.`
-    ),
-  ]);
+  const response = await model.invoke(
+    [
+      new SystemMessage(COMPACTION_PROMPT),
+      new HumanMessage(
+        `Conversation to summarize:\n\n${transcript}\n\nProvide the structured 9-section summary now.`
+      ),
+    ],
+    config
+  );
 
   const raw =
     typeof response.content === "string"
@@ -148,7 +155,8 @@ async function llmCompact(messages: BaseMessage[]): Promise<string> {
 // ─── Node ────────────────────────────────────────────────────────────────────
 
 export async function compactionNode(
-  state: typeof GraphState.State
+  state: typeof GraphState.State,
+  config?: RunnableConfig
 ): Promise<Partial<typeof GraphState.State>> {
   const { messages, compactionCount } = state;
 
@@ -170,7 +178,7 @@ export async function compactionNode(
   const toSummarize = afterMicro.slice(0, afterMicro.length - COMPACTION_TAIL_SIZE);
 
   try {
-    const summary = await llmCompact(toSummarize);
+    const summary = await llmCompact(toSummarize, config);
 
     const summaryMsg = new SystemMessage(
       `[CONTEXT SUMMARY — previous conversation compacted]\n\n${summary}`

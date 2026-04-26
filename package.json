@@ -27,5 +27,9 @@
       "email": "oscar@gndx.dev",
       "url": "https://lab10.ai"
     }
-  ]
+  ],
+  "dependencies": {
+    "@langfuse/core": "^5.2.0",
+    "@langfuse/langchain": "^5.2.0"
+  }
 }
