@@ -32,7 +32,7 @@ import { getCheckpointer } from "./checkpointer";
 import { GraphState } from "./state";
 import { compactionNode } from "./nodes/compaction_node";
 import { createMemoryInjectionNode } from "./nodes/memory_injection_node";
-import { createLangfuseRunnableConfig } from "./langfuse";
+import { createLangfuseRunnableConfig, withLangfuseRootTrace } from "./langfuse";
 
 
 export interface AgentInput {
@@ -288,19 +288,23 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   const checkpointer = await getCheckpointer();
   const app = graph.compile({ checkpointer });
 
+  const traceName = resumeDecision ? "agent-confirmation" : "agent-message";
+  const langfuseTags = [
+    "10x-builders-agent",
+    bypassConfirmation ? "cron" : "interactive",
+    resumeDecision ? "resume" : "message",
+  ];
+  const langfuseMetadata = {
+    agentSessionId: sessionId,
+    bypassConfirmation,
+  };
+
   const langfuseConfig = createLangfuseRunnableConfig({
     userId,
     sessionId,
-    runName: resumeDecision ? "agent-confirmation" : "agent-message",
-    tags: [
-      "10x-builders-agent",
-      bypassConfirmation ? "cron" : "interactive",
-      resumeDecision ? "resume" : "message",
-    ],
-    metadata: {
-      agentSessionId: sessionId,
-      bypassConfirmation,
-    },
+    runName: traceName,
+    tags: langfuseTags,
+    metadata: langfuseMetadata,
   });
   const config: RunnableConfig = {
     ...langfuseConfig,
@@ -309,22 +313,70 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
 
   let finalState: typeof GraphState.State & { [INTERRUPT]?: unknown[] };
 
+  function traceOutputSummary(
+    state: typeof GraphState.State & { [INTERRUPT]?: unknown[] }
+  ) {
+    const interrupts = (state as Record<string, unknown>)[INTERRUPT] as
+      | Array<{ value: unknown }>
+      | undefined;
+    if (interrupts?.length) {
+      const iv = interrupts[0].value as {
+        tool_name: string;
+        message: string;
+      };
+      return {
+        interrupted: true,
+        tool_name: iv.tool_name,
+        confirmation_preview:
+          iv.message.length > 2000 ? `${iv.message.slice(0, 2000)}…` : iv.message,
+      };
+    }
+    const lastMessage = state.messages[state.messages.length - 1];
+    const responseText =
+      typeof lastMessage.content === "string"
+        ? lastMessage.content
+        : JSON.stringify(lastMessage.content);
+    const max = 8000;
+    return {
+      interrupted: false,
+      assistant_response:
+        responseText.length <= max ? responseText : `${responseText.slice(0, max)}…`,
+    };
+  }
+
   if (resumeDecision) {
     // Resume interrupted graph with human decision
-    finalState = await app.invoke(
-      new Command({ resume: resumeDecision }),
-      config
-    );
+    finalState = await withLangfuseRootTrace({
+      userId,
+      sessionId,
+      traceName,
+      input: { resumeDecision },
+      tags: langfuseTags,
+      metadata: langfuseMetadata,
+      execute: () =>
+        app.invoke(new Command({ resume: resumeDecision }), config),
+      summarizeResult: traceOutputSummary,
+    });
   } else {
     // New message — persist to DB (audit log) then append to checkpointer state.
     // The checkpointer is the sole source of truth for message history; we never
     // reconstruct from DB to avoid duplicating messages across invocations.
-    await addMessage(db, sessionId, "user", message!);
-
-    finalState = await app.invoke(
-      { messages: [new HumanMessage(message!)], sessionId, userId, systemPrompt },
-      config
-    );
+    finalState = await withLangfuseRootTrace({
+      userId,
+      sessionId,
+      traceName,
+      input: { userMessage: message! },
+      tags: langfuseTags,
+      metadata: langfuseMetadata,
+      execute: async () => {
+        await addMessage(db, sessionId, "user", message!);
+        return app.invoke(
+          { messages: [new HumanMessage(message!)], sessionId, userId, systemPrompt },
+          config
+        );
+      },
+      summarizeResult: traceOutputSummary,
+    });
   }
 
   // Check if the graph is paused at an interrupt
