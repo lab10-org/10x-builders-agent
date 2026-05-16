@@ -1,6 +1,10 @@
 import { CallbackHandler } from "@langfuse/langchain";
 import { LangfuseSpanProcessor } from "@langfuse/otel";
-import { propagateAttributes, startActiveObservation } from "@langfuse/tracing";
+import {
+  propagateAttributes,
+  setActiveTraceIO,
+  startActiveObservation,
+} from "@langfuse/tracing";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import type { RunnableConfig } from "@langchain/core/runnables";
 
@@ -89,9 +93,12 @@ export async function withLangfuseRootTrace<T>(
         options.traceName,
         async (obs) => {
           obs.update({ input: options.input });
+          setActiveTraceIO({ input: options.input });
           try {
             const result = await options.execute();
-            obs.update({ output: options.summarizeResult(result) });
+            const output = options.summarizeResult(result);
+            obs.update({ output });
+            setActiveTraceIO({ output });
             return result;
           } catch (error) {
             obs.update({
