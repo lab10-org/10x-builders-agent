@@ -1,0 +1,17 @@
+{
+  "name": "@agents/evals",
+  "private": true,
+  "scripts": {
+    "run-faq": "tsx run-faq-experiment.ts"
+  },
+  "dependencies": {
+    "@langfuse/client": "^5",
+    "@supabase/supabase-js": "^2",
+    "dotenv": "^16"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}

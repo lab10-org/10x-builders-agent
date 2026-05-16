@@ -272,12 +272,11 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   const memoryInjectionNode = createMemoryInjectionNode({ db, userId });
 
   const graph = new StateGraph(GraphState)
-    .addNode("memory_injection", memoryInjectionNode)
+    // .addNode("memory_injection", memoryInjectionNode)
     .addNode("compaction", compactionNode)
     .addNode("agent", agentNode)
     .addNode("tools", toolExecutorNode)
-    .addEdge("__start__", "memory_injection")
-    .addEdge("memory_injection", "compaction")
+    .addEdge("__start__", "compaction")
     .addEdge("compaction", "agent")
     .addConditionalEdges("agent", shouldContinue, {
       tools: "tools",
